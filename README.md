@@ -1,1 +1,1 @@
-# Bloggera_Blog_App
+# Bloggera
