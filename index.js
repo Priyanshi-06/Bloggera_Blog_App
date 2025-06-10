@@ -313,8 +313,8 @@ app.post("/submit", requireActiveSession, (req, res) => {
   res.redirect("/view");
 });
 
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-});
+// app.listen(port, () => {
+//   console.log(`Server running on port ${port}`);
+// });
 
-//export default app;
+export default app;
