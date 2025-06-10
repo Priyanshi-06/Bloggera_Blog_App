@@ -1,0 +1,28 @@
+<%- include("./partials/header.ejs") %>
+
+<div class="form-page-container">
+
+  <h1 style="text-align: center; font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 30px; color: #070505; margin-bottom: 10px;">
+    Welcome Back 👋
+  </h1>
+  <% if (message) { %>
+    <p class="error"><%= message %></p>
+  <% } %>
+    
+
+  <form action="/sign_in" method="POST" class="entry sign-in-form">
+    <label for="email">Email:</label><br>
+    <input type="email" id="email" name="email" value="<%= email || '' %>" placeholder="Enter your email" required><br>
+
+    <label for="password">Password:</label><br>
+    <input type="password" id="password" name="password" placeholder="Enter your password" required><br>
+
+    <button type="submit">Sign In</button>
+    <p style="text-align:center">
+      Don't have an account? 
+      <a href="/register" style="text-decoration: none; color: black;">Register</a>.
+    </p>
+  </form>
+</div>
+
+<%- include("./partials/footer.ejs") %>

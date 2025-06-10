@@ -1,0 +1,25 @@
+<%- include("./partials/header.ejs") %>
+<div class="form-page-container">
+   <h1 style="text-align: center; font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 30px; color: #070505; margin-bottom: 10px;">
+    Create Your Bloggera Account ✍️
+  </h1>
+  <form action="/register" method="POST" class="entry sign-in-form">
+
+    <% if (message) { %>
+      <p class="error"><%= message %></p>
+    <% } %>
+
+    <label for="username">Username:</label>
+    <input type="text" id="username" name="username" value="<%= username || '' %>" placeholder="Enter your username" required>
+
+    <label for="email">Email:</label>
+    <input type="email" id="email" name="email" value="<%= email || '' %>" placeholder="Enter your email" required>
+
+    <label for="password">Password:</label>
+    <input type="password" id="password" name="password" placeholder="Enter your password" required>
+
+    <button type="submit">Create Account</button>
+    <p style="text-align: center;">Already have an account? <a href="/sign_in" style="text-decoration:none;color:black">Sign In</a>.</p>
+  </form>
+</div>
+<%- include("./partials/footer.ejs") %>
