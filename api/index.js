@@ -3,20 +3,16 @@ import bodyParser from "body-parser";
 import session from "express-session";
 import path from "path";
 import { fileURLToPath } from "url";
+import { createServer } from "http";
 
 const app = express();
-const port = 3000;
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// ✅ Adjusted for Vercel folder structure
 app.set("view engine", "ejs");
-app.set("views", path.join(__dirname, "views"));
-
-const users = []; // { id, username, email, password }
-const blogEntries = []; // { id, authorId, authorUsername, title, description, createdAt }
-
-app.use(express.static(path.join(__dirname, "public")));
+app.set("views", path.join(__dirname, "../views"));
+app.use(express.static(path.join(__dirname, "../public")));
 app.use(bodyParser.urlencoded({ extended: true }));
 
 const sessionOptions = {
@@ -24,18 +20,13 @@ const sessionOptions = {
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false, // Set to true if using HTTPS
-    maxAge: 24 * 60 * 60 * 1000 // 1 day
+    secure: false,
+    maxAge: 24 * 60 * 60 * 1000
   }
 };
 
-if (process.env.NODE_ENV === "production") {
-  console.warn("⚠️ WARNING: MemoryStore is not suitable for production.");
-}
-
 app.use(session(sessionOptions));
 
-// Middleware to make user and redirectTo available in templates
 app.use((req, res, next) => {
   res.locals.user = req.session.user || null;
   if (req.query.redirectTo) {
@@ -45,7 +36,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// --- Auth Middleware ---
 function requireActiveSession(req, res, next) {
   if (req.session.user) {
     res.locals.user = req.session.user;
@@ -56,7 +46,9 @@ function requireActiveSession(req, res, next) {
   }
 }
 
-// --- Blog Seed Data ---
+const users = [];
+const blogEntries = [];
+
 const initialBlogs = [
   {
     id: "init-1",
@@ -125,18 +117,16 @@ app.post("/register", (req, res) => {
   }
   const existingUser = users.find(user => user.email === email);
   if (existingUser) {
-    // Preserve redirectTo when redirecting
     let signInUrl = `/sign_in?message=${encodeURIComponent("Email already registered. Please sign in.")}&email=${encodeURIComponent(email)}`;
     if(req.session.redirectTo) {
         signInUrl += `&redirectTo=${encodeURIComponent(req.session.redirectTo)}`;
     }
     return res.redirect(signInUrl);
   }
-  // IMPORTANT: HASH PASSWORDS in a real application!
   const newUser = { id: Date.now().toString(), username, email, password };
   users.push(newUser);
   req.session.user = newUser;
-  const redirectTo = req.session.redirectTo || "/add_blog"; // Default to form after register
+  const redirectTo = req.session.redirectTo || "/add_blog";
   delete req.session.redirectTo;
   res.redirect(redirectTo);
 });
@@ -150,29 +140,24 @@ app.get("/sign_in", (req, res) => {
   res.render("sign_in", { message: req.query.message || null, email: req.query.email || "" });
 });
 
-
 app.post("/sign_in", (req, res) => {
   const { email, password } = req.body;
-  // IMPORTANT: Compare HASHED passwords in a real application!
   const user = users.find(u => u.email === email && u.password === password);
   if (!user) {
     return res.render("sign_in", { message: "Invalid email or password.", email });
   }
   req.session.user = user;
-  const redirectTo = req.session.redirectTo || "/add_blog"; // Default to form after sign in
+  const redirectTo = req.session.redirectTo || "/add_blog";
   delete req.session.redirectTo;
   res.redirect(redirectTo);
 });
 
 app.get("/logout", (req, res) => {
   req.session.destroy(err => {
-    if (err) {
-      console.error("Logout error:", err);
-    }
+    if (err) console.error("Logout error:", err);
     res.redirect("/?message=You have been signed out.");
   });
 });
-
 
 app.get("/add_blog", requireActiveSession, (req, res) => {
   res.render("add_blog", { message: null, title: "", content: "" });
@@ -189,63 +174,50 @@ app.post("/add_blog", requireActiveSession, (req, res) => {
   }
   const newEntry = {
     id: Date.now().toString(),
-    authorId: req.session.user.id, // Assuming user object has an id
+    authorId: req.session.user.id,
     authorUsername: req.session.user.username,
-    email: req.session.user.email, // If you store email on user session
+    email: req.session.user.email,
     title,
     content,
     createdAt: new Date()
   };
   blogEntries.push(newEntry);
-  res.redirect("/"); // Or to "/view" or the specific blog post page
+  res.redirect("/");
 });
 
 app.get("/view", (req, res) => {
-  const combinedBlogs = [...initialBlogs, ...blogEntries].sort(
-    (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
-  );
+  const combinedBlogs = [...initialBlogs, ...blogEntries].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   res.render("view_all", { blogs: combinedBlogs });
 });
 
-app.get("/delete", requireActiveSession, (req, res) => { // Protect with auth
-  // Use session for messages
+app.get("/delete", requireActiveSession, (req, res) => {
   const messageToShow = req.session.deleteMessage || null;
-  delete req.session.deleteMessage; // Clear after use
+  delete req.session.deleteMessage;
   res.render("delete.ejs", { message: messageToShow });
 });
 
 app.post("/delete", requireActiveSession, (req, res) => {
   const titleToDelete = req.body.blogTitle?.trim().toLowerCase();
-
   if (!titleToDelete) {
     req.session.deleteMessage = "Please provide a blog title to delete.";
     return res.redirect("/delete");
   }
 
-  // Check if it's a default (undeletable) blog
-  const existsInInitial = initialBlogs.some(
-    (entry) => entry.title.trim().toLowerCase() === titleToDelete
-  );
-
+  const existsInInitial = initialBlogs.some(entry => entry.title.trim().toLowerCase() === titleToDelete);
   if (existsInInitial) {
     req.session.deleteMessage = "This blog is part of the default collection and cannot be deleted.";
     return res.redirect("/delete");
   }
 
-  // Allow deletion only from user-created blogs
-  const index = blogEntries.findIndex(
-    (entry) =>
-      entry.title.trim().toLowerCase() === titleToDelete &&
-      entry.authorId === req.session.user.id
+  const index = blogEntries.findIndex(entry =>
+    entry.title.trim().toLowerCase() === titleToDelete && entry.authorId === req.session.user.id
   );
 
   if (index !== -1) {
     blogEntries.splice(index, 1);
     req.session.deleteMessage = "Blog deleted successfully!";
   } else {
-    const existsButNotOwned = blogEntries.some(
-      (entry) => entry.title.trim().toLowerCase() === titleToDelete
-    );
+    const existsButNotOwned = blogEntries.some(entry => entry.title.trim().toLowerCase() === titleToDelete);
     req.session.deleteMessage = existsButNotOwned
       ? "You are not authorized to delete this blog."
       : "Blog not found!";
@@ -254,29 +226,23 @@ app.post("/delete", requireActiveSession, (req, res) => {
   res.redirect("/delete");
 });
 
-app.get("/edit", requireActiveSession, (req, res) => { // Protect with auth
+app.get("/edit", requireActiveSession, (req, res) => {
   res.render("edit.ejs", {
-      message: req.session.editMessage || null,
-      blogToEdit: null // Populate this if you're fetching a specific blog for editing
+    message: req.session.editMessage || null,
+    blogToEdit: null
   });
   delete req.session.editMessage;
 });
 
-
 app.post("/edit", requireActiveSession, (req, res) => {
-  const originalTitle = req.body.EditedBlogTitle?.trim().toLowerCase();  // fixed
+  const originalTitle = req.body.EditedBlogTitle?.trim().toLowerCase();
   const newDesc = req.body.EditedBlogDesc?.trim();
-
   if (!originalTitle || !newDesc) {
     req.session.editMessage = "Both fields are required.";
     return res.redirect("/edit");
   }
 
-  // Find the blog
-  const blog = blogEntries.find((b) => 
-    b.title.trim().toLowerCase() === originalTitle
-  );
-
+  const blog = blogEntries.find(b => b.title.trim().toLowerCase() === originalTitle);
   if (!blog) {
     req.session.editMessage = "Blog not found! Create it first.";
     return res.redirect("/edit");
@@ -290,22 +256,18 @@ app.post("/edit", requireActiveSession, (req, res) => {
   blog.description = newDesc;
   blog.updatedAt = new Date();
   req.session.editMessage = "Blog description updated successfully!";
-  
   res.redirect("/view");
 });
-
-
 
 app.post("/submit", requireActiveSession, (req, res) => {
   const { blogTitle, blogDesc } = req.body;
   if (!blogTitle || !blogDesc) {
-    // Redirect back to the form it came from, or handle error appropriately
     return res.status(400).send("Title and description are required.");
   }
   blogEntries.push({
     id: Date.now().toString(),
     title: blogTitle,
-    description: blogDesc, // Make sure your EJS for viewing uses 'description'
+    description: blogDesc,
     authorId: req.session.user.id,
     authorUsername: req.session.user.username,
     createdAt: new Date()
@@ -313,8 +275,10 @@ app.post("/submit", requireActiveSession, (req, res) => {
   res.redirect("/view");
 });
 
-// app.listen(port, () => {
-//   console.log(`Server running on port ${port}`);
-// });
+// ⛔ Don't use app.listen() on Vercel
 
-export default app;
+// ✅ Required: Vercel export handler
+const server = createServer(app);
+export default function handler(req, res) {
+  server.emit("request", req, res);
+}
